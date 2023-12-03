@@ -236,6 +236,7 @@ package com.shadqh.bot.common.entity.client.goals;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Random;
 import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
@@ -272,7 +273,7 @@ public class CoverGoal extends Goal {
             return false;
         }
 
-        // Check if the mob needs to find water (for example, if it's on fire)
+
         if (this.mob.isOnFire()) {
             BlockPos blockpos = this.lookForWater(this.mob.level, this.mob, 5);
             if (blockpos != null) {
@@ -284,28 +285,38 @@ public class CoverGoal extends Goal {
         }
 
         // Perform ray tracing in a 2D cone
-        int range = 10; // Range of each ray
-        int numRays = 10; // Number of rays in the cone
-        float coneAngle = 45; // Total angle of the cone in degrees
+        int range = 20; // Range of each ray
+        int numRays = 120; // Number of rays in the cone
+        float coneAngle = 120; // Total angle of the cone in degrees
 
         List<BlockHitResult> results = performConeRayTraces(this.mob, range, numRays, coneAngle);
 
-        // Process the results
+        List<BlockPos> blocks = new ArrayList<>();
         for (BlockHitResult result : results) {
             if (result.getType() == HitResult.Type.BLOCK) {
                 BlockPos hitPos = result.getBlockPos();
-                // You can add more logic here to process the hit position
-                // For example, setting the mob's target position or determining if suitable cover is found
-                // As an example, let's set the mob's target position to the first hit position
-                this.posX = hitPos.getX();
-                this.posY = hitPos.getY();
-                this.posZ = hitPos.getZ();
-                return true;
+                blocks.add(result.getBlockPos());
+                System.out.println(hitPos);
+
             }
+            System.out.println(result + "hello");
         }
 
-        // Fallback to finding a random position if no suitable cover/block was found
-        return this.findRandomPosition();
+
+        if(blocks.size() > 0) {
+            Random random = new Random();
+            int index = random.nextInt(blocks.size());
+            BlockPos block = blocks.get(index);
+            System.out.println(block + "WORLD HELLO ME");
+            this.posY = block.getY();
+            this.posX = block.getX();
+            this.posZ = block.getZ();
+            return true;
+
+        }else{
+
+            return this.findRandomPosition();
+        }
     }
 
 
@@ -352,34 +363,23 @@ public class CoverGoal extends Goal {
 
     private List<BlockHitResult> performConeRayTraces(Entity entity, int range, int numRays, float coneAngle) {
         List<BlockHitResult> results = new ArrayList<>();
-        Vec3 startVec = entity.getEyePosition(1.0f); // Starting at the entity's eye position
-        Vec3 forwardDirection = entity.getViewVector(1.0f); // Forward direction
-
-        // The middle of the cone should be aligned with the forward direction
+        Vec3 startVec = entity.getEyePosition(1.0f);
+        Vec3 forwardDirection = entity.getViewVector(1.0f);
         float halfConeAngle = coneAngle / 2.0f;
-
         for (int i = 0; i < numRays; i++) {
-            // Calculate angle for this ray within the cone
             float angle = -halfConeAngle + (coneAngle / (numRays - 1)) * i;
             Vec3 direction = rotateVectorHorizontally(forwardDirection, angle);
-
-            // Perform ray trace
             BlockHitResult result = rayTraceFirstBlockHit(startVec, direction, range);
             results.add(result);
         }
-
         return results;
     }
-
     private Vec3 rotateVectorHorizontally(Vec3 vector, float angleDegrees) {
-        // Rotate around the Y axis
         float angleRadians = (float) Math.toRadians(angleDegrees);
         float sin = (float)Math.sin(angleRadians);
         float cos = (float)Math.cos(angleRadians);
         return new Vec3(vector.x * cos - vector.z * sin, vector.y, vector.x * sin + vector.z * cos);
     }
-
-    // ... existing methods like rayTraceFirstBlockHit and rayTraceBlocks ...
 
     private BlockHitResult rayTraceFirstBlockHit(Vec3 startVec, Vec3 direction, int range) {
         Vec3 endVec = startVec.add(direction.scale(range));
@@ -391,24 +391,17 @@ public class CoverGoal extends Goal {
         Vec3 startVec = context.getFrom();
         Vec3 endVec = context.getTo();
         Vec3 currentVec = startVec;
-        double step = 0.1; // Define a small step size for incrementing the ray
-
+        double step = 0.1;
         while (currentVec.distanceTo(endVec) > step) {
             BlockPos blockPos = new BlockPos(currentVec);
             net.minecraft.world.level.block.state.BlockState blockState = world.getBlockState(blockPos);
-
-            // If the block shouldn't be ignored, return the result
             if (!ignorePredicate.test(blockState)) {
                 Vec3 hitVec = currentVec;
                 net.minecraft.core.Direction hitFace = net.minecraft.core.Direction.getNearest(currentVec.x - blockPos.getX(), currentVec.y - blockPos.getY(), currentVec.z - blockPos.getZ());
                 return new BlockHitResult(hitVec, hitFace, blockPos, false);
             }
-
-            // Increment the currentVec towards the endVec
             currentVec = currentVec.add((endVec.x - currentVec.x) * step, (endVec.y - currentVec.y) * step, (endVec.z - currentVec.z) * step);
         }
-
-        // If no block was hit, return a miss
         Vec3 delta = endVec.subtract(startVec).normalize();
         net.minecraft.core.Direction direction = net.minecraft.core.Direction.getNearest(delta.x, delta.y, delta.z);
         return BlockHitResult.miss(endVec, direction, new BlockPos(endVec));
